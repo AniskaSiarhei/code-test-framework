@@ -106,25 +106,34 @@ public class TestRunner {
                     ParameterizedTest annotation = method.getAnnotation(ParameterizedTest.class);
                     String[] params = annotation.value();
 
-                    for (String param : params) {
+                    for (String paramSet : params) {
                         if (beforeMethod != null) beforeMethod.invoke(testInstance);
 
-                        System.out.println("Running parameterized test: " + method.getName() + " with param: " + param);
+                        String[] paramValues = paramSet.split(",");
+                        Class<?>[] parameterTypes = method.getParameterTypes();
+                        Object[] convertedParams = new Object[parameterTypes.length];
+
+                        for (int i = 0; i < parameterTypes.length; i++) {
+                            String value = paramValues[i].trim();
+                            convertedParams[i] = convertToType(value, parameterTypes[i]);
+                        }
+
+                        System.out.println("Running parameterized test: " + method.getName() + " with param: " + paramSet);
                         boolean passed = true;
                         String errorMessage = null;
 
                         try {
-                            method.invoke(testInstance, param);
-                            System.out.println("✔ Test passed with param: " + param);
+                            method.invoke(testInstance, convertedParams);
+                            System.out.println("✔ Test passed with param: " + paramSet);
                         } catch (Exception e) {
-                            System.out.println("❌ Test failed with param " + param + ": " + e.getCause());
+                            System.out.println("❌ Test failed with param " + paramSet + ": " + e.getCause());
                             passed = false;
                             errorMessage = e.getCause() != null ? e.getCause().toString() : e.getMessage();
                         }
 
                         results.add(new TestResult(
                                 testClass.getName(),
-                                method.getName() + " [param: " + param + "]",
+                                method.getName() + " [param: " + paramSet + "]",
                                 passed,
                                 errorMessage
                         ));
@@ -138,4 +147,18 @@ public class TestRunner {
             e.printStackTrace();
         }
     }
+
+    private static Object convertToType(String value, Class<?> type) {
+        if (type == int.class || type == Integer.class) {
+            return Integer.parseInt(value);
+        } else if (type == boolean.class || type == Boolean.class) {
+            return Boolean.parseBoolean(value);
+        } else if (type == double.class || type == Double.class) {
+            return Double.parseDouble(value);
+        } else if (type == String.class) {
+            return value;
+        }
+        throw new IllegalArgumentException("Unsupported parameter type: " + type.getName());
+    }
+
 }
