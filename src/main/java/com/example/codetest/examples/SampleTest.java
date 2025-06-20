@@ -27,6 +27,12 @@ public class SampleTest {
         Assert.assertEquals(5, value);
     }
 
+    @Test
+    public void thirdTest() {
+        System.out.println("Third test executed");
+        Assert.assertFalse(value < 0);
+    }
+
     @After
     public void teardown() {
         System.out.println("Teardown method called");

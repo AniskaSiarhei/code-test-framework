@@ -1,18 +1,12 @@
 package com.example.codetest.runner;
 
-import com.example.codetest.annotations.After;
-import com.example.codetest.annotations.Before;
-import com.example.codetest.annotations.Test;
-import com.example.codetest.report.TestReportGenerator;
-import com.example.codetest.report.TestResult;
-import org.springframework.context.annotation.AnnotationConfigApplicationContext;
-import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import com.example.codetest.annotations.*;
+import com.example.codetest.report.*;
+import org.springframework.context.annotation.*;
 import org.springframework.core.type.filter.TypeFilter;
 
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class TestRunner {
 
@@ -32,7 +26,7 @@ public class TestRunner {
                     String className = metadataReader.getClassMetadata().getClassName();
                     Class<?> clazz = Class.forName(className);
                     for (Method method : clazz.getDeclaredMethods()) {
-                        if (method.isAnnotationPresent(Test.class)) {
+                        if (method.isAnnotationPresent(Test.class) || method.isAnnotationPresent(ParameterizedTest.class)) {
                             return true;
                         }
                     }
@@ -69,7 +63,6 @@ public class TestRunner {
 
     public static void runTests(Class<?> testClass, Object testInstance) {
         try {
-
             Method beforeMethod = null;
             Method afterMethod = null;
 
@@ -82,6 +75,7 @@ public class TestRunner {
             }
 
             for (Method method : testClass.getDeclaredMethods()) {
+
                 if (method.isAnnotationPresent(Test.class)) {
                     if (beforeMethod != null) beforeMethod.invoke(testInstance);
 
@@ -107,8 +101,39 @@ public class TestRunner {
                     if (afterMethod != null) afterMethod.invoke(testInstance);
                     System.out.println("--------------------------------------------------");
                 }
-            }
 
+                if (method.isAnnotationPresent(ParameterizedTest.class)) {
+                    ParameterizedTest annotation = method.getAnnotation(ParameterizedTest.class);
+                    String[] params = annotation.value();
+
+                    for (String param : params) {
+                        if (beforeMethod != null) beforeMethod.invoke(testInstance);
+
+                        System.out.println("Running parameterized test: " + method.getName() + " with param: " + param);
+                        boolean passed = true;
+                        String errorMessage = null;
+
+                        try {
+                            method.invoke(testInstance, param);
+                            System.out.println("✔ Test passed with param: " + param);
+                        } catch (Exception e) {
+                            System.out.println("❌ Test failed with param " + param + ": " + e.getCause());
+                            passed = false;
+                            errorMessage = e.getCause() != null ? e.getCause().toString() : e.getMessage();
+                        }
+
+                        results.add(new TestResult(
+                                testClass.getName(),
+                                method.getName() + " [param: " + param + "]",
+                                passed,
+                                errorMessage
+                        ));
+
+                        if (afterMethod != null) afterMethod.invoke(testInstance);
+                    }
+                    System.out.println("--------------------------------------------------");
+                }
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
