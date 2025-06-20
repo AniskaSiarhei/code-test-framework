@@ -5,6 +5,7 @@ import com.example.codetest.annotations.Before;
 import com.example.codetest.annotations.Test;
 import com.example.codetest.report.TestReportGenerator;
 import com.example.codetest.report.TestResult;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.core.type.filter.TypeFilter;
 
@@ -19,7 +20,11 @@ public class TestRunner {
 
     public static void runAllTests(String basePackage) {
 
-        try {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.scan(basePackage);  // scan all tests and components
+            context.refresh();          // Raising the context
+
+
             ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
 
             TypeFilter typestMethodFilter = (metadataReader, metadataReaderFactory) -> {
@@ -43,10 +48,17 @@ public class TestRunner {
             for (var candidate : candidates) {
                 String className = candidate.getBeanClassName();
                 Class<?> clazz = Class.forName(className);
-                runTests(clazz);
+
+                // We either get the bean from Spring, or we create it manually
+                Object testInstance = context.getBeanProvider(clazz).getIfAvailable();
+                if (testInstance == null) {
+                    testInstance = clazz.getDeclaredConstructor().newInstance();
+                }
+
+                runTests(clazz, testInstance);
             }
 
-            // Генерируем отчеты после всех тестов
+            // We generate reports after all the tests
             TestReportGenerator.generateJsonReport(results, "target/test-report.json");
             TestReportGenerator.generateHtmlReport(results, "target/test-report.html");
 
@@ -55,9 +67,8 @@ public class TestRunner {
         }
     }
 
-    public static void runTests(Class<?> testClass) {
+    public static void runTests(Class<?> testClass, Object testInstance) {
         try {
-            Object testInstance = testClass.getDeclaredConstructor().newInstance();
 
             Method beforeMethod = null;
             Method afterMethod = null;
