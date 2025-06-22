@@ -5,7 +5,7 @@ import com.example.codetest.annotations.Before;
 import com.example.codetest.annotations.Test;
 import com.example.codetest.assertions.Assert;
 
-public class SampleTest {
+public class BeforeAfterTest {
 
     private int value;
 
