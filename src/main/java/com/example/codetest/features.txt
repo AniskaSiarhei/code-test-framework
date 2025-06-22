@@ -1,6 +1,7 @@
 + Реализован @After, @Before
 + Добавлены кастомные ассерты (например, Assert.assertTrue())
-+ Добавлено поддержка: списков (assertListEquals), карт (assertMapEquals), коллекций (assertContains)
++ Добавлена поддержка: списков (assertListEquals), карт (assertMapEquals), коллекций (assertContains)
++ Добавлена поддержка кастомных сообщений в Assert
 + Автоматический поиск всех тестов в пакете (без ручного указания класса в main)
 + Генерация HTML и JSON отчёта (статистика: Passed / Failed / Ошибки)
 + Интеграция с Spring Bean (DI тестов)
@@ -27,9 +28,6 @@
 
 4. Dependency Injection в тесты:
 Инъекция бинов из Spring-контекста прямо в тесты
-
-5. Расширенные Assertions:
-Новые ассерты:
 
 6. Поддержка @Disabled (игнорировать тесты):
 
