@@ -1,12 +1,20 @@
 package com.example.codetest.runner;
 
-import com.example.codetest.annotations.*;
-import com.example.codetest.report.*;
-import org.springframework.context.annotation.*;
+import com.example.codetest.annotations.After;
+import com.example.codetest.annotations.Before;
+import com.example.codetest.annotations.Disabled;
+import com.example.codetest.annotations.ParameterizedTest;
+import com.example.codetest.annotations.Test;
+import com.example.codetest.annotations.Timeout;
+import com.example.codetest.report.TestReportGenerator;
+import com.example.codetest.report.TestResult;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.core.type.filter.TypeFilter;
 
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.concurrent.*;
 
 public class TestRunner {
 
@@ -66,6 +74,10 @@ public class TestRunner {
             Method beforeMethod = null;
             Method afterMethod = null;
 
+            // Checking @Disabled at the class level
+            boolean classDisabled = testClass.isAnnotationPresent(Disabled.class);
+            String classDisabledReason = classDisabled ? testClass.getAnnotation(Disabled.class).value() : "";
+
             for (Method method : testClass.getDeclaredMethods()) {
                 if (method.isAnnotationPresent(Before.class)) {
                     beforeMethod = method;
@@ -76,71 +88,143 @@ public class TestRunner {
 
             for (Method method : testClass.getDeclaredMethods()) {
 
-                if (method.isAnnotationPresent(Test.class)) {
-                    if (beforeMethod != null) beforeMethod.invoke(testInstance);
+                boolean methodDisabled = method.isAnnotationPresent(Disabled.class);
+                String methodDisabledReason = methodDisabled ? method.getAnnotation(Disabled.class).value() : "";
 
-                    System.out.println("Running test: " + method.getName());
-                    boolean passed = true;
-                    String errorMessage = null;
-                    try {
-                        method.invoke(testInstance);
-                        System.out.println("✔ Test passed");
-                    } catch (Exception e) {
-                        System.out.println("❌ Test failed: " + e.getCause());
-                        passed = false;
-                        errorMessage = e.getCause() != null ? e.getCause().toString() : e.getMessage();
-                    }
+                if (method.isAnnotationPresent(Test.class) || method.isAnnotationPresent(ParameterizedTest.class)) {
+                    Timeout timeoutAnnotation = method.getAnnotation(Timeout.class);
+                    long timeout = (timeoutAnnotation == null) ? 0 : timeoutAnnotation.value();
 
-                    results.add(new TestResult(
-                            testClass.getName(),
-                            method.getName(),
-                            passed,
-                            errorMessage
-                    ));
+                    if (method.isAnnotationPresent(Test.class)) {
 
-                    if (afterMethod != null) afterMethod.invoke(testInstance);
-                    System.out.println("--------------------------------------------------");
-                }
-
-                if (method.isAnnotationPresent(ParameterizedTest.class)) {
-                    ParameterizedTest annotation = method.getAnnotation(ParameterizedTest.class);
-                    String[] params = annotation.value();
-
-                    for (String paramSet : params) {
-                        if (beforeMethod != null) beforeMethod.invoke(testInstance);
-
-                        String[] paramValues = paramSet.split(",");
-                        Class<?>[] parameterTypes = method.getParameterTypes();
-                        Object[] convertedParams = new Object[parameterTypes.length];
-
-                        for (int i = 0; i < parameterTypes.length; i++) {
-                            String value = paramValues[i].trim();
-                            convertedParams[i] = convertToType(value, parameterTypes[i]);
+                        if (classDisabled || methodDisabled) {
+                            String reason = classDisabled ? classDisabledReason : methodDisabledReason;
+                            System.out.println("⚠ Test " + method.getName() + " is disabled. Reason: " + reason);
+                            results.add(new TestResult(
+                                    testClass.getName(),
+                                    method.getName(),
+                                    true,
+                                    "Disabled: " + reason
+                            ));
+                            continue;
                         }
 
-                        System.out.println("Running parameterized test: " + method.getName() + " with param: " + paramSet);
+                        if (beforeMethod != null) beforeMethod.invoke(testInstance);
+
+                        System.out.println("Running test: " + method.getName());
+
                         boolean passed = true;
                         String errorMessage = null;
 
                         try {
-                            method.invoke(testInstance, convertedParams);
-                            System.out.println("✔ Test passed with param: " + paramSet);
+                            if (timeout > 0) {
+                                ExecutorService executor = Executors.newSingleThreadExecutor();
+                                Future<?> future = executor.submit(() -> {
+                                    try {
+                                        method.invoke(testInstance);
+                                    } catch (Exception e) {
+                                        throw new RuntimeException(e);
+                                    }
+                                });
+
+                                future.get(timeout, TimeUnit.MILLISECONDS);
+                                executor.shutdown();
+                            } else {
+                                method.invoke(testInstance);
+                            }
+                            System.out.println("✔ Test passed");
+                        } catch (TimeoutException e) {
+                            passed = false;
+                            errorMessage = "Test timed out after " + timeout + " ms";
+                            System.out.println("❌ " + errorMessage);
                         } catch (Exception e) {
-                            System.out.println("❌ Test failed with param " + paramSet + ": " + e.getCause());
                             passed = false;
                             errorMessage = e.getCause() != null ? e.getCause().toString() : e.getMessage();
+                            System.out.println("❌ Test failed: " + e.getCause());
                         }
 
                         results.add(new TestResult(
                                 testClass.getName(),
-                                method.getName() + " [param: " + paramSet + "]",
+                                method.getName(),
                                 passed,
                                 errorMessage
                         ));
 
                         if (afterMethod != null) afterMethod.invoke(testInstance);
+                        System.out.println("--------------------------------------------------");
                     }
-                    System.out.println("--------------------------------------------------");
+
+                    if (method.isAnnotationPresent(ParameterizedTest.class)) {
+
+                        if (classDisabled || methodDisabled) {
+                            String reason = classDisabled ? classDisabledReason : methodDisabledReason;
+                            System.out.println("⚠ Parameterized test " + method.getName() + " is disabled. Reason: " + reason);
+                            results.add(new TestResult(
+                                    testClass.getName(),
+                                    method.getName() + " [parameterized]",
+                                    true,
+                                    "Disabled: " + reason
+                            ));
+                            continue;
+                        }
+
+                        ParameterizedTest annotation = method.getAnnotation(ParameterizedTest.class);
+                        String[] params = annotation.value();
+
+                        for (String paramSet : params) {
+                            if (beforeMethod != null) beforeMethod.invoke(testInstance);
+
+                            String[] paramValues = paramSet.split(",");
+                            Class<?>[] parameterTypes = method.getParameterTypes();
+                            Object[] convertedParams = new Object[parameterTypes.length];
+
+                            for (int i = 0; i < parameterTypes.length; i++) {
+                                String value = paramValues[i].trim();
+                                convertedParams[i] = convertToType(value, parameterTypes[i]);
+                            }
+
+                            System.out.println("Running parameterized test: " + method.getName() + " with param: " + paramSet);
+                            boolean passed = true;
+                            String errorMessage = null;
+
+                            try {
+                                if (timeout > 0) {
+                                    ExecutorService executor = Executors.newSingleThreadExecutor();
+                                    Future<?> future = executor.submit(() -> {
+                                        try {
+                                            method.invoke(testInstance, convertedParams);
+                                        } catch (Exception e) {
+                                            throw new RuntimeException(e);
+                                        }
+                                    });
+
+                                    future.get(timeout, TimeUnit.MILLISECONDS);
+                                    executor.shutdown();
+                                } else {
+                                    method.invoke(testInstance, convertedParams);
+                                }
+                                System.out.println("✔ Test passed with param: " + paramSet);
+                            } catch (TimeoutException e) {
+                                passed = false;
+                                errorMessage = "Test timed out after " + timeout + " ms";
+                                System.out.println("❌ " + errorMessage);
+                            } catch (Exception e) {
+                                System.out.println("❌ Test failed with param " + paramSet + ": " + e.getCause());
+                                passed = false;
+                                errorMessage = e.getCause() != null ? e.getCause().toString() : e.getMessage();
+                            }
+
+                            results.add(new TestResult(
+                                    testClass.getName(),
+                                    method.getName() + " [param: " + paramSet + "]",
+                                    passed,
+                                    errorMessage
+                            ));
+
+                            if (afterMethod != null) afterMethod.invoke(testInstance);
+                        }
+                        System.out.println("--------------------------------------------------");
+                    }
                 }
             }
         } catch (Exception e) {
