@@ -11,5 +11,3 @@ public class TimeoutExample {
         Thread.sleep(2000);
     }
 }
-
-

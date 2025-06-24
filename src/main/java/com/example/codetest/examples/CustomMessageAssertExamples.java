@@ -34,17 +34,3 @@ public class CustomMessageAssertExamples {
         Assert.assertTrue(list.contains("a"), "The list should contain 'a'");
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

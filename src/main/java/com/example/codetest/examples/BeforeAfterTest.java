@@ -38,18 +38,3 @@ public class BeforeAfterTest {
         System.out.println("Teardown method called");
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

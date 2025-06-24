@@ -21,6 +21,3 @@ public class ParameterizedTestExample {
         Assert.assertEquals(expectedResult, number > 0);
     }
 }
-
-
-
