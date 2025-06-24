@@ -8,6 +8,7 @@ import com.example.codetest.annotations.Test;
 import com.example.codetest.annotations.Timeout;
 import com.example.codetest.report.TestReportGenerator;
 import com.example.codetest.report.TestResult;
+import com.example.codetest.utils.MetricsCollector;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.core.type.filter.TypeFilter;
@@ -70,6 +71,7 @@ public class TestRunner {
     }
 
     public static void runTests(Class<?> testClass, Object testInstance) {
+
         try {
             Method beforeMethod = null;
             Method afterMethod = null;
@@ -104,7 +106,8 @@ public class TestRunner {
                                     testClass.getName(),
                                     method.getName(),
                                     true,
-                                    "Disabled: " + reason
+                                    "Disabled: " + reason,
+                                    0, 0.0, 0.0
                             ));
                             continue;
                         }
@@ -112,6 +115,10 @@ public class TestRunner {
                         if (beforeMethod != null) beforeMethod.invoke(testInstance);
 
                         System.out.println("Running test: " + method.getName());
+
+                        long startTime = System.nanoTime();
+                        double startCpu = MetricsCollector.getProcessCpuLoad();
+                        double startMem = MetricsCollector.getMemoryUsageMb();
 
                         boolean passed = true;
                         String errorMessage = null;
@@ -127,27 +134,50 @@ public class TestRunner {
                                     }
                                 });
 
-                                future.get(timeout, TimeUnit.MILLISECONDS);
-                                executor.shutdown();
+                                try{
+                                    future.get(timeout, TimeUnit.MILLISECONDS);
+                                } catch (TimeoutException e) {
+                                    passed = false;
+                                    errorMessage = "Test timed out after " + timeout + " ms";
+                                    future.cancel(true);
+                                    System.out.println("❌ " + errorMessage);
+                                } finally {
+                                    List<Runnable> droppedTasks = executor.shutdownNow();
+                                    if (!droppedTasks.isEmpty()) {
+                                        System.out.println("⚠ Some tasks were not executed: " + droppedTasks.size());
+                                    }
+                                    if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                                        System.out.println("⚠ Executor did not terminate in time.");
+                                    }
+                                }
                             } else {
                                 method.invoke(testInstance);
                             }
-                            System.out.println("✔ Test passed");
-                        } catch (TimeoutException e) {
-                            passed = false;
-                            errorMessage = "Test timed out after " + timeout + " ms";
-                            System.out.println("❌ " + errorMessage);
+                            if (errorMessage == null) {
+                                System.out.println("✔ Test passed");
+                            }
                         } catch (Exception e) {
                             passed = false;
                             errorMessage = e.getCause() != null ? e.getCause().toString() : e.getMessage();
                             System.out.println("❌ Test failed: " + e.getCause());
                         }
 
+                        long endTime = System.nanoTime();
+                        double endCpu = MetricsCollector.getProcessCpuLoad();
+                        double endMem = MetricsCollector.getMemoryUsageMb();
+
+                        long execTimesMs = (endTime - startTime) / 1_000_000;
+                        double cpuUsed = Math.max(0, endCpu - startCpu);
+                        double memUsed = endMem - startMem;
+
                         results.add(new TestResult(
                                 testClass.getName(),
                                 method.getName(),
                                 passed,
-                                errorMessage
+                                errorMessage,
+                                execTimesMs,
+                                cpuUsed,
+                                memUsed
                         ));
 
                         if (afterMethod != null) afterMethod.invoke(testInstance);
@@ -163,7 +193,8 @@ public class TestRunner {
                                     testClass.getName(),
                                     method.getName() + " [parameterized]",
                                     true,
-                                    "Disabled: " + reason
+                                    "Disabled: " + reason,
+                                    0, 0.0, 0.0
                             ));
                             continue;
                         }
@@ -184,6 +215,11 @@ public class TestRunner {
                             }
 
                             System.out.println("Running parameterized test: " + method.getName() + " with param: " + paramSet);
+
+                            long startTime = System.nanoTime();
+                            double startCpu = MetricsCollector.getProcessCpuLoad();
+                            double startMem = MetricsCollector.getMemoryUsageMb();
+
                             boolean passed = true;
                             String errorMessage = null;
 
@@ -198,27 +234,50 @@ public class TestRunner {
                                         }
                                     });
 
-                                    future.get(timeout, TimeUnit.MILLISECONDS);
-                                    executor.shutdown();
+                                    try {
+                                        future.get(timeout, TimeUnit.MILLISECONDS);
+                                    } catch (TimeoutException e) {
+                                        passed = false;
+                                        errorMessage = "Test timed out after " + timeout + " ms";
+                                        future.cancel(true);
+                                        System.out.println("❌ " + errorMessage);
+                                    } finally {
+                                        List<Runnable> droppedTasks = executor.shutdownNow();
+                                        if (!droppedTasks.isEmpty()) {
+                                            System.out.println("⚠ Some tasks were not executed: " + droppedTasks.size());
+                                        }
+                                        if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                                            System.out.println("⚠ Executor did not terminate in time");
+                                        }
+                                    }
                                 } else {
                                     method.invoke(testInstance, convertedParams);
                                 }
-                                System.out.println("✔ Test passed with param: " + paramSet);
-                            } catch (TimeoutException e) {
-                                passed = false;
-                                errorMessage = "Test timed out after " + timeout + " ms";
-                                System.out.println("❌ " + errorMessage);
+                                if (errorMessage == null) {
+                                    System.out.println("✔ Test passed with param: " + paramSet);
+                                }
                             } catch (Exception e) {
-                                System.out.println("❌ Test failed with param " + paramSet + ": " + e.getCause());
                                 passed = false;
                                 errorMessage = e.getCause() != null ? e.getCause().toString() : e.getMessage();
+                                System.out.println("❌ Test failed with param " + paramSet + ": " + e.getCause());
                             }
+
+                            long endTime = System.nanoTime();
+                            double endCpu = MetricsCollector.getProcessCpuLoad();
+                            double endMem = MetricsCollector.getMemoryUsageMb();
+
+                            long execTimeMs = (endTime - startTime) / 1_000_000;
+                            double cpuUsed = Math.max(0, endCpu - startCpu);
+                            double memUsed = endMem - startMem;
 
                             results.add(new TestResult(
                                     testClass.getName(),
                                     method.getName() + " [param: " + paramSet + "]",
                                     passed,
-                                    errorMessage
+                                    errorMessage,
+                                    execTimeMs,
+                                    cpuUsed,
+                                    memUsed
                             ));
 
                             if (afterMethod != null) afterMethod.invoke(testInstance);

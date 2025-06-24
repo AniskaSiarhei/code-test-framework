@@ -23,7 +23,7 @@ public class TestReportGenerator {
         StringBuilder html = new StringBuilder();
         html.append("<html><head><title>Test Report</title></head><body>");
         html.append("<h1>Test Report</h1>");
-        html.append("<table border='1'><tr><th>Class</th><th>Method</th><th>Status</th><th>Error</th></tr>");
+        html.append("<table border='1'><tr><th>Class</th><th>Method</th><th>Status</th><th>Error</th><th>Time (ms)</th><th>CPU (%)</th><th>Memory (MB)</th></tr>");
 
         for (TestResult result : results) {
             html.append("<tr>");
@@ -32,6 +32,9 @@ public class TestReportGenerator {
             html.append("<td style='color:")
                     .append(result.isPassed() ? "green'>PASSED" : "red'>FAILED").append("</td>");
             html.append("<td>").append(result.getErrorMessage() == null ? "" : result.getErrorMessage()).append("</td>");
+            html.append("<td>").append(result.getExecutionTimeMs()).append("</td>");
+            html.append("<td>").append(String.format("%.2f", result.getCpuUsagePercent())).append("</td>");
+            html.append("<td>").append(String.format("%.2f", result.getMemoryUsageMb())).append("</td>");
             html.append("</tr>");
         }
 
