@@ -37,9 +37,9 @@ public void checkNumberPositive(int number, boolean expected) {
 
 After test execution:
 
--✅ **HTML report: target/test-report.html
+-✅ **HTML report**: target/test-report.html
 
--✅ **JSON report: target/test-report.json
+-✅ **JSON report**: target/test-report.json
 
 Reports include test status, error messages, execution time, CPU usage, and memory usage.
 
