@@ -6,3 +6,5 @@
 
 ## 📊 Живой отчет:
 ➡ https://AniskaSiarhei.github.io/code-test-framework/
+"// update" 
+"// update" 
