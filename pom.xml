@@ -48,13 +48,6 @@
 			<version>2.19.0</version>
 		</dependency>
 
-
-<!--		&lt;!&ndash; https://mvnrepository.com/artifact/org.reflections/reflections &ndash;&gt;-->
-<!--		<dependency>-->
-<!--			<groupId>org.reflections</groupId>-->
-<!--			<artifactId>reflections</artifactId>-->
-<!--			<version>0.10.2</version>-->
-<!--		</dependency>-->
 	</dependencies>
 
 	<build>
